@@ -28,6 +28,7 @@ You can set `rabbitmq.Debug = true` variable to view debug messages
 ## Settings
 
 1. `rabbitmq.ReconnectDelay` determines time that app wait for new reconnect try, defaults to `time.Second * 3`
+2. `rabbitmq.MaxReconnectAttempts` determines the number of reconnects will be attempted after a closure before exiting, defaults to `28800`
 
 ## Examples
 

@@ -12,11 +12,14 @@ import (
 
 var Debug bool
 var ReconnectDelay = time.Second * 3
+ // Max number of reconnect attempts for a connection. This is generous at default ReconnectDelay (1 day)
+var MaxReconnectAttempts int32 = 28800
 
 type Connection struct {
 	*amqp.Connection
 	closed int32
 	mutex  *sync.Mutex
+	reconnectAttemptsLeft uint32 // Stop when it reaches 0
 }
 
 func DialConfig(url string, config amqp.Config) (*Connection, error) {
@@ -26,8 +29,9 @@ func DialConfig(url string, config amqp.Config) (*Connection, error) {
 	}
 
 	c := &Connection{
-		Connection: conn,
-		mutex:      &sync.Mutex{},
+		Connection:            conn,
+		mutex:                 &sync.Mutex{},
+		reconnectAttemptsLeft: MaxReconnectAttempts,
 	}
 
 	go func() {
@@ -48,6 +52,11 @@ func DialConfig(url string, config amqp.Config) (*Connection, error) {
 				conn, err := amqp.Dial(url)
 				if err != nil {
 					debugf("reconnect failed, err: %v", err)
+					c.reconnectAttemptsLeft = c.reconnectAttemptsLeft - 1
+					if c.reconnectAttemptsLeft == 0 {
+						// Exit with error
+						return nil, err
+					}
 					continue
 				}
 
@@ -55,6 +64,7 @@ func DialConfig(url string, config amqp.Config) (*Connection, error) {
 				c.Connection = conn
 				c.mutex.Unlock()
 
+				c.reconnectAttemptsLeft = MaxReconnectAttempts // Reset to max allowed attempts
 				debugf("reconnect success")
 				break
 			}
@@ -71,8 +81,9 @@ func Dial(url string) (*Connection, error) {
 	}
 
 	c := &Connection{
-		Connection: conn,
-		mutex:      &sync.Mutex{},
+		Connection:            conn,
+		mutex:                 &sync.Mutex{},
+		reconnectAttemptsLeft: MaxReconnectAttempts,
 	}
 
 	go func() {
@@ -94,6 +105,11 @@ func Dial(url string) (*Connection, error) {
 				conn, err := amqp.Dial(url)
 				if err != nil {
 					debugf("reconnect failed, err: %v", err)
+					c.reconnectAttemptsLeft = c.reconnectAttemptsLeft - 1
+					if c.reconnectAttemptsLeft == 0 {
+						// Exit with error
+						return nil, err
+					}
 					continue
 				}
 
@@ -101,6 +117,7 @@ func Dial(url string) (*Connection, error) {
 				c.Connection = conn
 				c.mutex.Unlock()
 
+				c.reconnectAttemptsLeft = MaxReconnectAttempts // Reset to max allowed attempts
 				debugf("reconnect success")
 				break
 			}
